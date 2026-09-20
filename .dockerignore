@@ -1,0 +1,8 @@
+.git
+.DS_Store
+*.c
+*.gpu
+*.js
+*.o
+build/
+dist/
