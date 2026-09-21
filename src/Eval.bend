@@ -68,6 +68,8 @@ type Continuation is Data:
   KWith{binder: S.Var, body: S.Expr, environment: List<&2, EvalEnv>, next: Continuation}
   KForSource{binder: S.Var, body: S.Expr, environment: List<&2, EvalEnv>, next: Continuation}
   KForBody{remaining: List<&2, V.ComputedValue>, binder: S.Var, body: S.Expr, environment: List<&2, EvalEnv>, collected: List<&2, V.ComputedValue>, next: Continuation}
+  KFilterSource{binder: S.Var, condition: S.Expr, environment: List<&2, EvalEnv>, next: Continuation}
+  KFilterCondition{value: V.ComputedValue, remaining: List<&2, V.ComputedValue>, binder: S.Var, condition: S.Expr, environment: List<&2, EvalEnv>, collected: List<&2, V.ComputedValue>, next: Continuation}
   KOrderSource{binder: S.Var, key: S.Expr, environment: List<&2, EvalEnv>, next: Continuation}
   KOrderKey{value: V.ComputedValue, remaining: List<&2, V.ComputedValue>, binder: S.Var, key: S.Expr, environment: List<&2, EvalEnv>, collected: List<&2, OrderEntry>, next: Continuation}
   KShapeSource{binder: S.Var, fields: List<&2, S.Expr>, environment: List<&2, EvalEnv>, next: Continuation}
@@ -87,6 +89,7 @@ type Machine is Data:
   Return{outcome: EvalOutcome, next: Continuation}
   Raise{error: EvalError, next: Continuation}
   RunFor{remaining: List<&2, V.ComputedValue>, binder: S.Var, body: S.Expr, environment: List<&2, EvalEnv>, current: M.Store, collected: List<&2, V.ComputedValue>, next: Continuation}
+  RunFilter{remaining: List<&2, V.ComputedValue>, binder: S.Var, condition: S.Expr, environment: List<&2, EvalEnv>, current: M.Store, collected: List<&2, V.ComputedValue>, next: Continuation}
   RunOrder{remaining: List<&2, V.ComputedValue>, binder: S.Var, key: S.Expr, environment: List<&2, EvalEnv>, current: M.Store, collected: List<&2, OrderEntry>, next: Continuation}
   RunShape{remaining: List<&2, V.ComputedValue>, binder: S.Var, fields: List<&2, S.Expr>, environment: List<&2, EvalEnv>, current: M.Store, shaped: List<&2, V.ComputedValue>, next: Continuation}
   BuildShape{source: V.ComputedValue, remaining_fields: List<&2, S.Expr>, source_tail: List<&2, V.ComputedValue>, binder: S.Var, all_fields: List<&2, S.Expr>, environment: List<&2, EvalEnv>, current: M.Store, collected_fields: List<&2, V.ComputedValue>, shaped: List<&2, V.ComputedValue>, next: Continuation}
@@ -103,6 +106,8 @@ def continuation_tail(kont: Continuation) -> NextContinuation:
     case KWith{binder, body, environment, next}: HasContinuation{next}
     case KForSource{binder, body, environment, next}: HasContinuation{next}
     case KForBody{remaining, binder, body, environment, collected, next}: HasContinuation{next}
+    case KFilterSource{binder, condition, environment, next}: HasContinuation{next}
+    case KFilterCondition{value, remaining, binder, condition, environment, collected, next}: HasContinuation{next}
     case KOrderSource{binder, key, environment, next}: HasContinuation{next}
     case KOrderKey{value, remaining, binder, key, environment, collected, next}: HasContinuation{next}
     case KShapeSource{binder, fields, environment, next}: HasContinuation{next}
@@ -211,6 +216,11 @@ def continue_update_source(current: M.Store, values: List<&2, V.ComputedValue>, 
     case Con{V.CVObject{+id, object_fields}, Nil{}}: BuildMutation{UpdateTarget{id}, fields, Con{ValueBinding{binder, Con{V.CVObject{id, object_fields}, Nil{}}}, environment}, current, Nil{}, later}
     case Con{value, Nil{}}: Raise{RuntimeTypeError{}, later}
     case _: Raise{RuntimeCardinalityError{}, later}
+
+def continue_filter_condition(current: M.Store, matches: Bool, value: V.ComputedValue, remaining: List<&2, V.ComputedValue>, binder: S.Var, condition: S.Expr, environment: List<&2, EvalEnv>, collected: List<&2, V.ComputedValue>, later: Continuation) -> Machine:
+  match matches:
+    case True{}: RunFilter{remaining, binder, condition, environment, current, V.append_values(collected, Con{value, Nil{}}), later}
+    case False{}: RunFilter{remaining, binder, condition, environment, current, collected, later}
 
 def continue_order_key(current: M.Store, key: SortKey, value: V.ComputedValue, remaining: List<&2, V.ComputedValue>, binder: S.Var, expression: S.Expr, environment: List<&2, EvalEnv>, collected: List<&2, OrderEntry>, later: Continuation) -> Machine:
   match key:
@@ -397,6 +407,7 @@ def eval_machine(+schema: D.Schema, +initial: M.Store, fuel: Nat, state: Machine
             case S.EIfStrict{condition, when_true, when_false}: eval_machine(schema, initial, remaining, Evaluate{current, environment, condition, KIf{when_true, when_false, environment, next}})
             case S.EWith{bound, binder, body}: eval_machine(schema, initial, remaining, Evaluate{current, environment, bound, KWith{binder, body, environment, next}})
             case S.EFor{source, binder, body}: eval_machine(schema, initial, remaining, Evaluate{current, environment, source, KForSource{binder, body, environment, next}})
+            case S.EFilter{source, binder, condition}: eval_machine(schema, initial, remaining, Evaluate{current, environment, source, KFilterSource{binder, condition, environment, next}})
             case S.EOrderBy{source, binder, key}: eval_machine(schema, initial, remaining, Evaluate{current, environment, source, KOrderSource{binder, key, environment, next}})
             case S.EInsert{object_type, fields}: eval_machine(schema, initial, remaining, BuildMutation{InsertTarget{object_type}, fields, environment, current, Nil{}, next})
             case S.EUpdate{source, binder, fields}: eval_machine(schema, initial, remaining, Evaluate{current, environment, source, KUpdateSource{binder, fields, environment, next}})
@@ -414,6 +425,8 @@ def eval_machine(+schema: D.Schema, +initial: M.Store, fuel: Nat, state: Machine
                 case KWith{binder, body, environment, later}: eval_machine(schema, initial, remaining, Evaluate{current, Con{ValueBinding{binder, values}, environment}, body, later})
                 case KForSource{binder, body, environment, later}: eval_machine(schema, initial, remaining, RunFor{values, binder, body, environment, current, Nil{}, later})
                 case KForBody{remaining_values, binder, body, environment, collected, later}: eval_machine(schema, initial, remaining, RunFor{remaining_values, binder, body, environment, current, V.append_values(collected, values), later})
+                case KFilterSource{binder, condition, environment, later}: eval_machine(schema, initial, remaining, RunFilter{values, binder, condition, environment, current, Nil{}, later})
+                case KFilterCondition{value, remaining_values, binder, condition, environment, collected, later}: eval_machine(schema, initial, remaining, continue_filter_condition(current, any_true(values), value, remaining_values, binder, condition, environment, collected, later))
                 case KOrderSource{binder, key, environment, later}: eval_machine(schema, initial, remaining, RunOrder{values, binder, key, environment, current, Nil{}, later})
                 case KOrderKey{value, remaining_values, binder, key, environment, collected, later}: eval_machine(schema, initial, remaining, continue_order_key(current, key_of(values), value, remaining_values, binder, key, environment, collected, later))
                 case KShapeSource{binder, fields, environment, later}: eval_machine(schema, initial, remaining, RunShape{values, binder, fields, environment, current, Nil{}, later})
@@ -431,6 +444,10 @@ def eval_machine(+schema: D.Schema, +initial: M.Store, fuel: Nat, state: Machine
           match remaining_values:
             case Nil{}: eval_machine(schema, initial, remaining, Return{EvalOK{EvalResult{collected, current}}, next})
             case Con{value, rest}: eval_machine(schema, initial, remaining, Evaluate{current, Con{ValueBinding{binder, Con{value, Nil{}}}, environment}, body, KForBody{rest, binder, body, environment, collected, next}})
+        case RunFilter{remaining_values, +binder, +condition, +environment, current, collected, next}:
+          match remaining_values:
+            case Nil{}: eval_machine(schema, initial, remaining, Return{EvalOK{EvalResult{collected, current}}, next})
+            case Con{+value, rest}: eval_machine(schema, initial, remaining, Evaluate{current, Con{ValueBinding{binder, Con{value, Nil{}}}, environment}, condition, KFilterCondition{value, rest, binder, condition, environment, collected, next}})
         case RunOrder{remaining_values, +binder, +key, +environment, current, collected, next}:
           match remaining_values:
             case Nil{}: eval_machine(schema, initial, remaining, Return{EvalOK{EvalResult{ordered_values(sort_entries(collected, Nil{})), current}}, next})

@@ -61,6 +61,7 @@ type Expr is Data:
   EIfStrict{condition: Expr, when_true: Expr, when_false: Expr}
   EWith{bound: Expr, binder: Var, body: Expr}
   EFor{source: Expr, binder: Var, body: Expr}
+  EFilter{source: Expr, binder: Var, condition: Expr}
   EOrderBy{source: Expr, binder: Var, key: Expr}
   EInsert{object_type: TypeName, fields: List<&2, Expr>}
   EUpdate{source: Expr, binder: Var, fields: List<&2, Expr>}

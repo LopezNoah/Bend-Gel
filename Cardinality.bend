@@ -27,7 +27,12 @@ def add(a: Card, b: Card) -> Card:
         case CMany{}: CNonEmptyMany{}
         case CNonEmptyMany{}: CNonEmptyMany{}
     case CMany{}:
-      CMany{}
+      match b:
+        case CEmpty{}: CMany{}
+        case COptional{}: CMany{}
+        case COne{}: CNonEmptyMany{}
+        case CMany{}: CMany{}
+        case CNonEmptyMany{}: CNonEmptyMany{}
     case CNonEmptyMany{}:
       match b:
         case CEmpty{}: CNonEmptyMany{}

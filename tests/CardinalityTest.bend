@@ -20,6 +20,21 @@ def check(a: C.Card, b: C.Card, c: Bool, d: Bool) -> Bool:
     case _:
       False{}
 
+def many_plus_one_regression() -> {
+  C.add(C.CMany{}, C.COne{}) == C.CNonEmptyMany{} : C.Card
+}:
+  {==}
+
+def many_plus_non_empty_many_regression() -> {
+  C.add(C.CMany{}, C.CNonEmptyMany{}) == C.CNonEmptyMany{} : C.Card
+}:
+  {==}
+
+def many_plus_one_is_commutative() -> {
+  C.add(C.CMany{}, C.COne{}) == C.add(C.COne{}, C.CMany{}) : C.Card
+}:
+  {==}
+
 def main() -> Bool:
   a = C.add(C.COptional{}, C.COne{})
   b = C.mul(C.CNonEmptyMany{}, C.COptional{})

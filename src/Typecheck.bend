@@ -353,6 +353,19 @@ def insert_type_result(+schema: D.Schema, +object_type: S.TypeName) -> Synth:
 def insert_type_known(known: Bool, schema: D.Schema, object_type: S.TypeName) -> Synth:
   insert_known(known, schema, object_type)
 
+def type_root_known(known: Bool, schema: D.Schema, +object_type: S.TypeName) -> Synth:
+  match known:
+    case True{}:
+      fields = D.fields_for_name(object_type, schema_objects(schema))
+      SynthOK{S.QObject{object_type, fields}, C.CMany{}}
+    case False{}:
+      SynthError{UnknownType{object_type}}
+
+def type_root_result(+schema: D.Schema, +object_type: S.TypeName) -> Synth:
+  objects = schema_objects(schema)
+  known = D.schema_has_name(object_type, objects)
+  type_root_known(known, schema, object_type)
+
 def update_single(single: Bool, typ: S.QueryType) -> Synth:
   match single:
     case False{}: SynthError{CardinalityMismatch{}}
@@ -390,7 +403,7 @@ def synth(+schema: D.Schema, +context: List<&2, TypeContext>, expression: S.Expr
     case S.EEmpty{typ}:
       SynthOK{typ, C.CEmpty{}}
     case S.ETypeRoot{name}:
-      insert_type_result(schema, name)
+      type_root_result(schema, name)
     case S.EUnion{left, right}:
       synth_bind(synth(schema, context, left), left_result => synth_bind(synth(schema, context, right), right_result => union_results(left_result, right_result)))
     case S.EProject{source, label}:
@@ -419,6 +432,8 @@ def synth(+schema: D.Schema, +context: List<&2, TypeContext>, expression: S.Expr
       synth(schema, context, bound)
     case S.EFor{source, binder, body}:
       synth(schema, context, source)
+    case S.EFilter{source, binder, condition}:
+      synth(schema, context, source)
     case S.EOrderBy{source, binder, key}:
       synth(schema, context, source)
     case S.EInsert{object_type, fields}:
@@ -440,8 +455,8 @@ def synth_for_body(schema: D.Schema, context: List<&2, TypeContext>, binder: S.V
   match source:
     case SynthError{error}: SynthError{error}
     case SynthOK{source_type, source_card}:
-      body_result = synth(schema, Con{Binding{binder, source_type, C.COne{}}, context}, body)
-      for_body_result(source_card, body_result)
+       body_result = synth(schema, Con{Binding{binder, source_type, C.COne{}}, context}, body)
+       for_body_result(source_card, body_result)
 
 def order_key_accepts(optional: Bool, source_type: S.QueryType, source_card: C.Card) -> Synth:
   match optional:
