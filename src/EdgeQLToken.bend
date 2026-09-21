@@ -33,6 +33,7 @@ type Token is Data:
   TPlus{}
   TCoalesce{}
   TSemicolon{}
+  TOther{character: Char}
   TEOF{}
 
 type LexError is Data:

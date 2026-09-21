@@ -1,4 +1,5 @@
 import Base
+import ./EdgeQLToken.bend as T
 
 type Name is Data:
   Name{text: String}
@@ -37,6 +38,17 @@ type SurfaceExpr is Data:
   SFor{name: Name, source: SurfaceExpr, body: SurfaceExpr}
   SInsert{object_type: Name, fields: List<&2, SurfaceExpr>}
   SUpdate{source: SurfaceExpr, filter: SurfaceExpr, fields: List<&2, SurfaceExpr>}
+
+# Schema grammar is intentionally kept token-backed until the SDL and DDL
+# productions are complete.  The document parser still separates these
+# statements from query ASTs and validates their top-level delimiters.
+type SurfaceStatement is Data:
+  SQuery{value: SurfaceExpr}
+  SSchema{tokens: List<&2, T.Token>}
+  SUnparsed{tokens: List<&2, T.Token>}
+
+type SurfaceDocument is Data:
+  Document{statements: List<&2, SurfaceStatement>}
 
 type MaybeSurfaceExpr is Data:
   NoExpr{}

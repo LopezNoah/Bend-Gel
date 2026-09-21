@@ -9,12 +9,36 @@ type ParseError is Data:
   ExpectedIdentifier{}
   ExpectedShape{}
   UnclosedDelimiter{}
+  DocumentUnclosedDelimiter{}
   ParseStepLimit{}
   LexFailure{error: T.LexError}
 
 type ParseResult is Data:
   Parsed{value: E.SurfaceExpr}
   ParseFailed{error: ParseError}
+
+type DocumentResult is Data:
+  DocumentParsed{value: E.SurfaceDocument}
+  DocumentFailed{error: ParseError}
+
+type DocumentStatementResult is Data:
+  DocumentStatementParsed{value: E.SurfaceStatement}
+  DocumentStatementFailed{error: ParseError}
+
+type DocumentStatementKind is Data:
+  StatementQuery{}
+  StatementSchema{}
+  StatementUnparsed{}
+
+type Delimiter is Data:
+  Brace{}
+  Paren{}
+
+type DocumentState is Data:
+  DocumentScan{tokens: List<&2, T.Token>, current: List<&2, T.Token>, statements: List<&2, E.SurfaceStatement>, delimiters: List<&2, Delimiter>}
+  DocumentFinish{current: List<&2, T.Token>, statements: List<&2, E.SurfaceStatement>}
+  DocumentFinishStatement{result: DocumentStatementResult, tokens: List<&2, T.Token>, statements: List<&2, E.SurfaceStatement>}
+  DocumentDone{value: E.SurfaceDocument}
 
 type ExprResult is Data:
   ExprParsed{value: E.SurfaceExpr, rest: List<&2, T.Token>}
@@ -527,3 +551,141 @@ def lexical_parse_result(result: T.LexResult) -> ParseResult:
 
 def parse_source(source: String) -> ParseResult:
   lexical_parse_result(L.lex(source))
+
+def is_schema_word(text: String) -> Bool:
+  match text:
+    case "module": True{}
+    case "type": True{}
+    case "abstract": True{}
+    case "scalar": True{}
+    case "function": True{}
+    case "alias": True{}
+    case "constraint": True{}
+    case "annotation": True{}
+    case "create": True{}
+    case "alter": True{}
+    case "drop": True{}
+    case "configure": True{}
+    case "grant": True{}
+    case "revoke": True{}
+    case "extension": True{}
+    case "migration": True{}
+    case _: False{}
+
+def statement_kind_schema(is_schema: Bool) -> DocumentStatementKind:
+  match is_schema:
+    case True{}: StatementSchema{}
+    case False{}: StatementUnparsed{}
+
+def statement_kind(token: T.Token) -> DocumentStatementKind:
+  match token:
+    case T.TSelect{}: StatementQuery{}
+    case T.TWith{}: StatementQuery{}
+    case T.TFor{}: StatementQuery{}
+    case T.TInsert{}: StatementQuery{}
+    case T.TUpdate{}: StatementQuery{}
+    case T.TIdentifier{text}: statement_kind_schema(is_schema_word(text))
+    case _: StatementUnparsed{}
+
+def query_document_statement(result: ParseResult) -> DocumentStatementResult:
+  match result:
+    case Parsed{value}: DocumentStatementParsed{E.SQuery{value}}
+    case ParseFailed{error}: DocumentStatementFailed{error}
+
+def document_statement_kind(kind: DocumentStatementKind, tokens: List<&2, T.Token>) -> DocumentStatementResult:
+  match kind:
+    case StatementQuery{}: query_document_statement(parse(tokens))
+    case StatementSchema{}: DocumentStatementParsed{E.SSchema{tokens}}
+    case StatementUnparsed{}: DocumentStatementParsed{E.SUnparsed{tokens}}
+
+def parse_document_statement(tokens: List<&2, T.Token>) -> DocumentStatementResult:
+  match tokens:
+    case Nil{}: DocumentStatementFailed{UnexpectedEnd{}}
+    case Con{+first, rest}: document_statement_kind(statement_kind(first), tokens)
+
+def document_starts_query_token(token: T.Token) -> Bool:
+  match token:
+    case T.TIdentifier{text}: Bool.not(is_schema_word(text))
+    case _: True{}
+
+def document_starts_query(tokens: List<&2, T.Token>) -> Bool:
+  match tokens:
+    case Nil{}: False{}
+    case Con{head, Nil{}}: document_starts_query_token(head)
+    case Con{head, tail}: document_starts_query(tail)
+
+def document_close_kind(is_query: Bool, token: T.Token, +tokens: List<&2, T.Token>, +current: List<&2, T.Token>, statements: List<&2, E.SurfaceStatement>, delimiters: List<&2, Delimiter>) -> DocumentState:
+  match is_query:
+    case True{}: DocumentScan{tokens, Con{token, current}, statements, delimiters}
+    case False{}:
+      result = parse_document_statement(List.reverse(&2, T.Token, Con{token, current}))
+      DocumentFinishStatement{result, tokens, statements}
+
+def document_close_boundary(is_query: Bool, token: T.Token, +tokens: List<&2, T.Token>, +current: List<&2, T.Token>, statements: List<&2, E.SurfaceStatement>, delimiters: List<&2, Delimiter>) -> DocumentState:
+  match tokens:
+    case Con{T.TSemicolon{}, rest}: DocumentScan{tokens, Con{token, current}, statements, delimiters}
+    case _: document_close_kind(is_query, token, tokens, current, statements, delimiters)
+
+def document_go(fuel: Nat, state: DocumentState) -> DocumentResult:
+  match fuel:
+    case 0n: DocumentFailed{ParseStepLimit{}}
+    case 1n+ +remaining:
+      match state:
+        case DocumentScan{tokens, +current, statements, delimiters}:
+          match tokens:
+            case Nil{}: document_go(remaining, DocumentFinish{current, statements})
+            case Con{token, +tail}:
+              match token:
+                case T.TEOF{}:
+                  match delimiters:
+                    case Nil{}: document_go(remaining, DocumentFinish{current, statements})
+                    case _: DocumentFailed{DocumentUnclosedDelimiter{}}
+                case T.TSemicolon{}:
+                  match delimiters:
+                    case Nil{}:
+                      result = parse_document_statement(List.reverse(&2, T.Token, current))
+                      document_go(remaining, DocumentFinishStatement{result, tail, statements})
+                    case _:
+                      document_go(remaining, DocumentScan{tail, Con{token, current}, statements, delimiters})
+                case T.TLBrace{}:
+                  document_go(remaining, DocumentScan{tail, Con{token, current}, statements, Con{Brace{}, delimiters}})
+                case T.TLParen{}:
+                  document_go(remaining, DocumentScan{tail, Con{token, current}, statements, Con{Paren{}, delimiters}})
+                case T.TRBrace{}:
+                  match delimiters:
+                    case Nil{}: DocumentFailed{DocumentUnclosedDelimiter{}}
+                    case Con{Brace{}, Nil{}}:
+                      document_go(remaining, document_close_boundary(document_starts_query(current), token, tail, current, statements, Nil{}))
+                    case Con{Brace{}, rest}:
+                      document_go(remaining, DocumentScan{tail, Con{token, current}, statements, rest})
+                    case Con{Paren{}, rest}: DocumentFailed{DocumentUnclosedDelimiter{}}
+                case T.TRParen{}:
+                  match delimiters:
+                    case Nil{}: DocumentFailed{DocumentUnclosedDelimiter{}}
+                    case Con{Paren{}, rest}: document_go(remaining, DocumentScan{tail, Con{token, current}, statements, rest})
+                    case Con{Brace{}, rest}: DocumentFailed{DocumentUnclosedDelimiter{}}
+                case _:
+                  document_go(remaining, DocumentScan{tail, Con{token, current}, statements, delimiters})
+        case DocumentFinish{current, statements}:
+          match current:
+            case Nil{}: document_go(remaining, DocumentDone{E.Document{List.reverse(&2, E.SurfaceStatement, statements)}})
+            case _:
+              result = parse_document_statement(List.reverse(&2, T.Token, current))
+              document_go(remaining, DocumentFinishStatement{result, Nil{}, statements})
+        case DocumentFinishStatement{result, tokens, statements}:
+          match result:
+            case DocumentStatementFailed{error}: DocumentFailed{error}
+            case DocumentStatementParsed{value}:
+              document_go(remaining, DocumentScan{tokens, Nil{}, Con{value, statements}, Nil{}})
+        case DocumentDone{value}: DocumentParsed{value}
+
+def parse_document(tokens: List<&2, T.Token>) -> DocumentResult:
+  document_go(100000n, DocumentScan{tokens, Nil{}, Nil{}, Nil{}})
+
+def lexical_document_result(result: T.LexResult) -> DocumentResult:
+  match result:
+    case T.LexFailed{error}: DocumentFailed{LexFailure{error}}
+    case T.Lexed{tokens}: parse_document(tokens)
+
+def parse_document_source(source: String) -> DocumentResult:
+  lexical_document_result(L.lex(source))

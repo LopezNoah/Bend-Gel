@@ -1,0 +1,49 @@
+DocumentParsed {
+  statements: [
+    SSchema {
+      # Schema statements are token-backed while SDL/DDL grammar is unfinished.
+      tokens: module default {
+        type User {
+          required property name -> str;
+          property age -> int64;
+          multi link friends -> User;
+        }
+      }
+    },
+    SSchema {
+      tokens: create type Audit {
+        create required property action -> str;
+      }
+    },
+    SQuery {
+      SSelect {
+        result: SName{Name{"User"}},
+        shape: [
+          SShapeField{Name{"name"}},
+          SShapeField{Name{"age"}}
+        ],
+        filter: SFilter {
+          SEq {
+            left: SPartialPath{Name{"age"}},
+            right: SLiteral{LInt{21}}
+          }
+        },
+        order: SOrder {
+          key: SPartialPath{Name{"name"}},
+          direction: Asc{}
+        }
+      }
+    },
+    SQuery {
+      SInsert {
+        object_type: Name{"User"},
+        fields: [
+          SShapeComputed {
+            name: Name{"name"},
+            value: SLiteral{LString{"Ada"}}
+          }
+        ]
+      }
+    }
+  ]
+}
