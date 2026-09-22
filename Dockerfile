@@ -7,7 +7,7 @@ ENV BEND_HOME=/opt/bend \
 # Bend is installed in the image, never on the host. The installer verifies
 # the release archive checksum before placing it under BEND_HOME.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates clang curl \
+    && apt-get install -y --no-install-recommends ca-certificates clang curl libsqlite3-0 \
     && curl -fsSL https://bend-lang.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
