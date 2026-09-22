@@ -35,20 +35,25 @@ dependency; do not treat the order as a list of independent feature ideas.
 
 - [ ] Audit `Cardinality.add`, `Cardinality.mul`, `Cardinality.le`, and
   `Cardinality.accepts` against the five modes in the paper.
-- [ ] Prove both additive identity laws and both multiplicative identity laws.
-- [ ] Prove multiplication annihilation by `CEmpty` on both sides.
-- [ ] Prove addition and multiplication associativity and addition
+- [x] Prove both additive identity laws and both multiplicative identity laws.
+- [x] Prove multiplication annihilation by `CEmpty` on both sides.
+- [x] Prove addition and multiplication associativity and addition
   commutativity.
-- [ ] Prove multiplication distributivity over addition in both orientations
+- [x] Prove multiplication commutativity.
+- [x] Prove multiplication distributivity over addition in both orientations
   required by the core rules.
-- [ ] Complete the cardinality ordering laws: reflexivity, transitivity,
+- [x] Complete the cardinality ordering laws: reflexivity, transitivity,
   antisymmetry, and the ordering cases used by typing.
-- [ ] Prove monotonicity of addition and multiplication with respect to the
+- [x] Prove monotonicity of addition and multiplication with respect to the
   cardinality ordering.
-- [ ] Treat `accepts(card, length)` as the semantic relation “length belongs to
-  cardinality” and prove the paper's length/cardinality compatibility facts
-  corresponding to Appendix B.5 and B.7.
-- [ ] Keep the finite constructor proofs exhaustive where that is clearer than
+- [x] Treat `accepts(card, length)` as the semantic relation “length belongs to
+  cardinality”.
+- [x] Add executable `accepts_order`, `accepts_add`, and `accepts_mul`
+  compatibility predicates.
+- [x] Prove that cardinality ordering preserves accepted lengths.
+- [x] Prove the addition and multiplication length-compatibility facts
+  corresponding to Appendix B.5 and B.7 for arbitrary accepted lengths.
+- [x] Keep the finite constructor proofs exhaustive where that is clearer than
   introducing an abstraction.
 
 ## 4. Executable Type Synthesis

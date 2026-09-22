@@ -101,23 +101,99 @@ def le(a: Card, b: Card) -> Bool:
         case CNonEmptyMany{}: True{}
         case _: False{}
 
+def card_eq(a: Card, b: Card) -> Bool:
+  match a:
+    case CEmpty{}:
+      match b:
+        case CEmpty{}: True{}
+        case _: False{}
+    case COptional{}:
+      match b:
+        case COptional{}: True{}
+        case _: False{}
+    case COne{}:
+      match b:
+        case COne{}: True{}
+        case _: False{}
+    case CMany{}:
+      match b:
+        case CMany{}: True{}
+        case _: False{}
+    case CNonEmptyMany{}:
+      match b:
+        case CNonEmptyMany{}: True{}
+        case _: False{}
+
+def implies(assumption: Bool, conclusion: Bool) -> Bool:
+  match assumption:
+    case True{}: conclusion
+    case False{}: True{}
+
+def nat_add(a: Nat, b: Nat) -> Nat:
+  match a:
+    case 0n: b
+    case 1n+rest: (1n + nat_add(rest, b) : Nat)
+
+def nat_mul(+a: Nat, +b: Nat) -> Nat:
+  match a:
+    case 0n: 0n
+    case 1n+rest:
+      match b:
+        case 0n: 0n
+        case 1n+other: nat_add(a, nat_mul(a, other))
+
 def accepts(card: Card, n: Nat) -> Bool:
   match card:
     case CEmpty{}:
-      Nat.is_eq(n, 0n)
+      match n:
+        case 0n: True{}
+        case 1n+p: False{}
     case COptional{}:
       match n:
         case 0n: True{}
         case 1n: True{}
         case 1n+p: False{}
     case COne{}:
-      Nat.is_eq(n, 1n)
+      match n:
+        case 0n: False{}
+        case 1n: True{}
+        case 1n+p: False{}
     case CMany{}:
       True{}
     case CNonEmptyMany{}:
       match n:
         case 0n: False{}
         case 1n+p: True{}
+
+def accepts_add(+a: Card, +b: Card, +left_length: Nat, +right_length: Nat) -> Bool:
+  left = accepts(a, left_length)
+  right = accepts(b, right_length)
+  premise = Bool.and(left, right)
+  result = accepts(add(a, b), nat_add(left_length, right_length))
+  implies(premise, result)
+
+def accepts_mul(+a: Card, +b: Card, +left_length: Nat, +right_length: Nat) -> Bool:
+  left = accepts(a, left_length)
+  right = accepts(b, right_length)
+  premise = Bool.and(left, right)
+  result = accepts(mul(a, b), nat_mul(left_length, right_length))
+  implies(premise, result)
+
+def accepts_order_result(+lower: Card, +upper: Card, +length: Nat) -> Bool:
+  ordered = le(lower, upper)
+  premise = accepts(lower, length)
+  result = accepts(upper, length)
+  implies(ordered, implies(premise, result))
+
+def accepts_order(+lower: Card, +upper: Card, +length: Nat) -> Bool:
+  match lower upper:
+    case CEmpty{} CEmpty{}: True{}
+    case COptional{} COptional{}: True{}
+    case COne{} COne{}: True{}
+    case CMany{} CMany{}: True{}
+    case CNonEmptyMany{} CNonEmptyMany{}: True{}
+    case _ CMany{}: True{}
+    case _ _: accepts_order_result(lower, upper, length)
 
 def name(card: Card) -> String:
   match card:

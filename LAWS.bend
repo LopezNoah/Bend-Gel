@@ -28,6 +28,14 @@ law multiply_one_right:
   for card: C.Card
   {C.mul(card, C.COne{}) == card : C.Card}
 
+law multiply_empty_left:
+  for card: C.Card
+  {C.mul(C.CEmpty{}, card) == C.CEmpty{} : C.Card}
+
+law multiply_empty_right:
+  for card: C.Card
+  {C.mul(card, C.CEmpty{}) == C.CEmpty{} : C.Card}
+
 law add_commutative:
   for a: C.Card
   for b: C.Card
@@ -45,9 +53,69 @@ law multiply_associative:
   for c: C.Card
   {C.mul(C.mul(a, b), c) == C.mul(a, C.mul(b, c)) : C.Card}
 
+law multiply_commutative:
+  for a: C.Card
+  for b: C.Card
+  {C.mul(a, b) == C.mul(b, a) : C.Card}
+
+law multiply_distributes_left:
+  for a: C.Card
+  for b: C.Card
+  for c: C.Card
+  {C.mul(a, C.add(b, c)) == C.add(C.mul(a, b), C.mul(a, c)) : C.Card}
+
+law multiply_distributes_right:
+  for a: C.Card
+  for b: C.Card
+  for c: C.Card
+  {C.mul(C.add(a, b), c) == C.add(C.mul(a, c), C.mul(b, c)) : C.Card}
+
 law le_reflexive:
   for card: C.Card
   {C.le(card, card) == True{} : Bool}
+
+law le_transitive:
+  for a: C.Card
+  for b: C.Card
+  for c: C.Card
+  {C.implies(Bool.and(C.le(a, b), C.le(b, c)), C.le(a, c)) == True{} : Bool}
+
+law le_antisymmetric:
+  for a: C.Card
+  for b: C.Card
+  {C.implies(Bool.and(C.le(a, b), C.le(b, a)), C.card_eq(a, b)) == True{} : Bool}
+
+law add_monotone:
+  for a: C.Card
+  for b: C.Card
+  for c: C.Card
+  {C.implies(C.le(b, c), C.le(C.add(a, b), C.add(a, c))) == True{} : Bool}
+
+law multiply_monotone:
+  for a: C.Card
+  for b: C.Card
+  for c: C.Card
+  {C.implies(C.le(b, c), C.le(C.mul(a, b), C.mul(a, c))) == True{} : Bool}
+
+law accepts_order:
+  for lower: C.Card
+  for upper: C.Card
+  for length: Nat
+  {C.accepts_order(lower, upper, length) == True{} : Bool}
+
+law accepts_add:
+  for a: C.Card
+  for b: C.Card
+  for left_length: Nat
+  for right_length: Nat
+  {C.accepts_add(a, b, left_length, right_length) == True{} : Bool}
+
+law accepts_mul:
+  for a: C.Card
+  for b: C.Card
+  for left_length: Nat
+  for right_length: Nat
+  {C.accepts_mul(a, b, left_length, right_length) == True{} : Bool}
 
 law many_plus_one:
   {C.add(C.CMany{}, C.COne{}) == C.CNonEmptyMany{} : C.Card}
