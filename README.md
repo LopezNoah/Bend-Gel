@@ -26,3 +26,11 @@ JavaScript Bend programs. The package exposes `SQLite.open`, `SQLite.execute`,
 `SQLite.query`, and `SQLite.close`; its integration test runs against an
 in-memory database. Native checks install the SQLite runtime library in the
 container so the same test exercises the C foreign backend.
+
+## Architecture roadmap
+
+- [`TODO.md`](TODO.md) tracks the ordered implementation and proof work.
+- [`docs/adr/0001-surface-parser-core-calculus.md`](docs/adr/0001-surface-parser-core-calculus.md)
+  records the surface parser/core calculus boundary.
+- [`docs/adr/0002-proof-development-order.md`](docs/adr/0002-proof-development-order.md)
+  records the metatheory dependency order.
