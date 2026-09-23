@@ -1,5 +1,6 @@
 import Base
 import ../src/EdgeQLParser.bend as P
+import ../src/EdgeQLSource.bend as Source
 import ../src/EdgeQLSyntax.bend as E
 
 def close_and_return(file_and_result: File & Result<&1, &1, U32 & String, String>) -> IO(String):
@@ -52,5 +53,5 @@ def check_parse(result: P.DocumentResult) -> IO(Unit):
 def main() -> IO(Unit):
   do IO<Unit>:
     source : String <- read_source("tests/fixtures/schema.edgeql")
-    result : P.DocumentResult = P.parse_document_source(source)
+    result : P.DocumentResult = Source.parse_document_source(source)
     check_parse(result)

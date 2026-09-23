@@ -1,5 +1,11 @@
 import Base
 import ./Cardinality.bend as C
+import ./src/Elaborate.bend as E
+import ./src/Syntax.bend as S
+import ./src/EdgeQLSyntax.bend as Surface
+import ./src/EdgeQLPretty.bend as Pretty
+import ./src/EdgeQLParser.bend as Parser
+import ./src/EdgeQLToken.bend as Token
 
 # Human-facing semantic contract for the Bend Gel prototype.
 #
@@ -119,3 +125,46 @@ law accepts_mul:
 
 law many_plus_one:
   {C.add(C.CMany{}, C.COne{}) == C.CNonEmptyMany{} : C.Card}
+
+# Invalid expressions cannot pass the elaboration boundary's core check.
+law invalid_core_rejected:
+  for value: S.Expr
+  {E.check_core_expr(value, False{}) == E.ElabFailed{E.InvalidCoreExpr{}} : E.ElabResult}
+
+law checked_elaboration_valid:
+  for result: E.ElabResult
+  {E.result_is_valid(E.check_core_result(result)) == True{} : Bool}
+
+# Failed elaborations satisfy this vacuously; successful ones satisfy the
+# structural predicate on the produced core expression.
+law elaboration_valid:
+  for surface: Surface.SurfaceExpr
+  {E.result_is_valid(E.elaborate(surface)) == True{} : Bool}
+
+# The subset's constructor records the AST. Parsing its canonical token
+# spelling recovers the corresponding SurfaceExpr.
+law pretty_roundtrip:
+  for ast: Pretty.CanonicalExpr
+  {Parser.parse(Pretty.pretty(ast)) == Parser.Parsed{Pretty.to_surface(ast)} : Parser.ParseResult}
+
+# Binary-token dispatch either leaves the lookahead with the caller or
+# consumes it; neither branch can increase pending input.
+law binary_step_monotone:
+  for operator: Maybe<&2, Parser.Operator>
+  for token: Token.Token
+  for rest: List<&2, Token.Token>
+  for values: List<&2, Surface.SurfaceExpr>
+  for operators: List<&2, Parser.Operator>
+  {Nat.is_le(
+    Parser.pending_token_count(Parser.parse_binary_token(operator, token, rest, values, operators)),
+    1n+List.length(&2, Token.Token, rest)) == True{} : Bool}
+
+# A comma may be retained for a shape, consumed for a call, or rejected;
+# reducing pending operators cannot create extra input tokens.
+law comma_step_monotone:
+  for rest: List<&2, Token.Token>
+  for values: List<&2, Surface.SurfaceExpr>
+  for operators: List<&2, Parser.Operator>
+  {Nat.is_le(
+    Parser.pending_token_count(Parser.end_comma(rest, values, operators)),
+    1n+List.length(&2, Token.Token, rest)) == True{} : Bool}

@@ -66,6 +66,62 @@ type Expr is Data:
   EInsert{object_type: TypeName, fields: List<&2, Expr>}
   EUpdate{source: Expr, binder: Var, fields: List<&2, Expr>}
 
+# EField is a field-list entry, not an expression in its own right. The
+# structural boundary admits it only in the field slots of shapes and
+# mutations, and checks every expression nested inside those entries.
+# This predicate does not claim that names resolve or that the term types.
+# The worklist uses the same 100000-step bound as elaboration: exhausting it
+# rejects the expression rather than accepting a partially checked tree.
+type ValidNode is Data:
+  CheckExpr{expr: Expr}
+  CheckField{expr: Expr}
+
+def queue_exprs(exprs: List<&2, Expr>, pending: List<&2, ValidNode>) -> List<&2, ValidNode>:
+  match exprs:
+    case Nil{}: pending
+    case Con{expr, rest}: Con{CheckExpr{expr}, queue_exprs(rest, pending)}
+
+def queue_fields(fields: List<&2, Expr>, pending: List<&2, ValidNode>) -> List<&2, ValidNode>:
+  match fields:
+    case Nil{}: pending
+    case Con{field, rest}: Con{CheckField{field}, queue_fields(rest, pending)}
+
+def valid_nodes(fuel: Nat, pending: List<&2, ValidNode>) -> Bool:
+  match fuel:
+    case 0n: False{}
+    case 1n+remaining:
+      match pending:
+        case Nil{}: True{}
+        case Con{node, rest}:
+          match node:
+            case CheckField{expr}:
+              match expr:
+                case EField{label, value}: valid_nodes(remaining, Con{CheckExpr{value}, rest})
+                case _: False{}
+            case CheckExpr{expr}:
+              match expr:
+                case EVar{var}: valid_nodes(remaining, rest)
+                case ELit{value}: valid_nodes(remaining, rest)
+                case EEmpty{typ}: valid_nodes(remaining, rest)
+                case EUnion{left, right}: valid_nodes(remaining, Con{CheckExpr{left}, Con{CheckExpr{right}, rest}})
+                case ETypeRoot{name}: valid_nodes(remaining, rest)
+                case EProject{source, label}: valid_nodes(remaining, Con{CheckExpr{source}, rest})
+                case EBacklink{source, label, owner}: valid_nodes(remaining, Con{CheckExpr{source}, rest})
+                case EField{label, value}: False{}
+                case EShape{source, binder, fields}: valid_nodes(remaining, Con{CheckExpr{source}, queue_fields(fields, rest)})
+                case ECall{builtin, args}: valid_nodes(remaining, queue_exprs(args, rest))
+                case EIfStrict{condition, when_true, when_false}:
+                  valid_nodes(remaining, Con{CheckExpr{condition}, Con{CheckExpr{when_true}, Con{CheckExpr{when_false}, rest}}})
+                case EWith{bound, binder, body}: valid_nodes(remaining, Con{CheckExpr{bound}, Con{CheckExpr{body}, rest}})
+                case EFor{source, binder, body}: valid_nodes(remaining, Con{CheckExpr{source}, Con{CheckExpr{body}, rest}})
+                case EFilter{source, binder, condition}: valid_nodes(remaining, Con{CheckExpr{source}, Con{CheckExpr{condition}, rest}})
+                case EOrderBy{source, binder, key}: valid_nodes(remaining, Con{CheckExpr{source}, Con{CheckExpr{key}, rest}})
+                case EInsert{object_type, fields}: valid_nodes(remaining, queue_fields(fields, rest))
+                case EUpdate{source, binder, fields}: valid_nodes(remaining, Con{CheckExpr{source}, queue_fields(fields, rest)})
+
+def valid_expr(expr: Expr) -> Bool:
+  valid_nodes(100000n, Con{CheckExpr{expr}, Nil{}})
+
 def type_name_eq(a: TypeName, b: TypeName) -> Bool:
   match a:
     case TypeName{+text}:

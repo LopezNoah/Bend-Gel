@@ -1,7 +1,6 @@
 import Base
 import ./EdgeQLToken.bend as T
 import ./EdgeQLSyntax.bend as E
-import ./EdgeQLLexer.bend as L
 
 type ParseError is Data:
   UnexpectedEnd{}
@@ -63,6 +62,17 @@ type ExprState is Data:
   End{end_kind: EndKind, rest: List<&2, T.Token>, values: List<&2, E.SurfaceExpr>, operators: List<&2, Operator>}
   Finished{value: E.SurfaceExpr, rest: List<&2, T.Token>}
   Failed{error: ParseError}
+
+# The expression state machine may pause without consuming a caller-owned
+# delimiter. This observable count lets local transition proofs distinguish
+# keeping that token from manufacturing additional input.
+def pending_token_count(state: ExprState) -> Nat:
+  match state:
+    case Scan{tokens, values, operators}: List.length(&2, T.Token, tokens)
+    case ReduceOperator{incoming, tokens, values, operators}: List.length(&2, T.Token, tokens)
+    case End{end_kind, rest, values, operators}: List.length(&2, T.Token, rest)
+    case Finished{value, rest}: List.length(&2, T.Token, rest)
+    case Failed{error}: 0n
 
 type ShapeContinuation is Data:
   ShapeDone{}
@@ -173,8 +183,11 @@ def end_comma(rest: List<&2, T.Token>, +values: List<&2, E.SurfaceExpr>, operato
     case Con{top, operator_tail}:
       match top:
         case OCall{name, args}: end_call_comma(name, args, rest, values, operator_tail)
-        case _: Failed{UnexpectedToken{T.TComma{}}}
-    case Nil{}: Failed{UnexpectedToken{T.TComma{}}}
+        case OParen{}: Failed{UnexpectedToken{T.TComma{}}}
+        case _: end_reduce_result(reduce_binary(top, values), Comma{}, rest, operator_tail)
+    # A shape's computed expression ends before its field separator. The
+    # shape parser owns that comma; only OCall consumes argument separators.
+    case Nil{}: finish_values(values, Con{T.TComma{}, rest})
 
 def end_keep(rest: List<&2, T.Token>, +values: List<&2, E.SurfaceExpr>, operators: List<&2, Operator>) -> ExprState:
   match operators:
@@ -333,9 +346,10 @@ def no_order() -> E.SurfaceExpr:
 
 def finish_query(value: E.SurfaceExpr, tokens: List<&2, T.Token>) -> ParseResult:
   match tokens:
-    case Con{T.TEOF{}, rest}: Parsed{value}
-    case Con{T.TSemicolon{}, Con{T.TEOF{}, rest}}: Parsed{value}
+    case Con{T.TEOF{}, Nil{}}: Parsed{value}
+    case Con{T.TSemicolon{}, Con{T.TEOF{}, Nil{}}}: Parsed{value}
     case Con{token, rest}: ParseFailed{UnexpectedToken{token}}
+    # The document scanner slices statements before their EOF marker.
     case Nil{}: Parsed{value}
 
 type SelectState is Data:
@@ -439,7 +453,7 @@ def for_expression_state(result: ExprResult, name: E.Name) -> StatementState:
 def for_body_result(result: ExprResult, name: E.Name, source: E.SurfaceExpr) -> ParseResult:
   match result:
     case ExprFailed{error}: ParseFailed{error}
-    case ExprParsed{body, rest}: Parsed{E.SFor{name, source, body}}
+    case ExprParsed{body, rest}: finish_query(E.SFor{name, source, body}, rest)
 
 def insert_shape_state(result: ShapeResult, name: E.Name) -> StatementState:
   match result:
@@ -541,16 +555,22 @@ def parse_statement(fuel: Nat, state: StatementState) -> ParseResult:
         case FinalExpression{result}:
           final_expression_result(result)
 
-def parse(tokens: List<&2, T.Token>) -> ParseResult:
-  parse_statement(100000n, StatementTokens{tokens})
+def ends_at_eof(tokens: List<&2, T.Token>) -> Bool:
+  match tokens:
+    case Nil{}: False{}
+    case Con{T.TEOF{}, Nil{}}: True{}
+    case Con{T.TEOF{}, rest}: False{}
+    case Con{token, rest}: ends_at_eof(rest)
 
-def lexical_parse_result(result: T.LexResult) -> ParseResult:
-  match result:
-    case T.LexFailed{error}: ParseFailed{LexFailure{error}}
-    case T.Lexed{tokens}: parse(tokens)
+def parse_complete(tokens: List<&2, T.Token>, terminated: Bool) -> ParseResult:
+  match terminated:
+    case True{}: parse_statement(100000n, StatementTokens{tokens})
+    case False{}: ParseFailed{UnexpectedEnd{}}
 
-def parse_source(source: String) -> ParseResult:
-  lexical_parse_result(L.lex(source))
+# A full parse requires one terminal EOF; sliced document statements use
+# parse_statement directly and legitimately have no EOF of their own.
+def parse(+tokens: List<&2, T.Token>) -> ParseResult:
+  parse_complete(tokens, ends_at_eof(tokens))
 
 def is_schema_word(text: String) -> Bool:
   match text:
@@ -594,7 +614,7 @@ def query_document_statement(result: ParseResult) -> DocumentStatementResult:
 
 def document_statement_kind(kind: DocumentStatementKind, tokens: List<&2, T.Token>) -> DocumentStatementResult:
   match kind:
-    case StatementQuery{}: query_document_statement(parse(tokens))
+    case StatementQuery{}: query_document_statement(parse_statement(100000n, StatementTokens{tokens}))
     case StatementSchema{}: DocumentStatementParsed{E.SSchema{tokens}}
     case StatementUnparsed{}: DocumentStatementParsed{E.SUnparsed{tokens}}
 
@@ -679,13 +699,10 @@ def document_go(fuel: Nat, state: DocumentState) -> DocumentResult:
               document_go(remaining, DocumentScan{tokens, Nil{}, Con{value, statements}, Nil{}})
         case DocumentDone{value}: DocumentParsed{value}
 
-def parse_document(tokens: List<&2, T.Token>) -> DocumentResult:
-  document_go(100000n, DocumentScan{tokens, Nil{}, Nil{}, Nil{}})
+def parse_document_complete(tokens: List<&2, T.Token>, terminated: Bool) -> DocumentResult:
+  match terminated:
+    case True{}: document_go(100000n, DocumentScan{tokens, Nil{}, Nil{}, Nil{}})
+    case False{}: DocumentFailed{UnexpectedEnd{}}
 
-def lexical_document_result(result: T.LexResult) -> DocumentResult:
-  match result:
-    case T.LexFailed{error}: DocumentFailed{LexFailure{error}}
-    case T.Lexed{tokens}: parse_document(tokens)
-
-def parse_document_source(source: String) -> DocumentResult:
-  lexical_document_result(L.lex(source))
+def parse_document(+tokens: List<&2, T.Token>) -> DocumentResult:
+  parse_document_complete(tokens, ends_at_eof(tokens))

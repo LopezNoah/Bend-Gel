@@ -15,7 +15,10 @@ The repository already has the beginnings of this boundary:
 
 - `src/EdgeQLSyntax.bend` defines `SurfaceExpr` and retains surface-only
   constructs such as partial paths and implicit subjects.
-- `src/EdgeQLParser.bend` produces surface syntax trees.
+- `src/EdgeQLParser.bend` parses tokens into surface syntax trees; the
+  `src/EdgeQLSource.bend` entry points compose it with the lexer for source
+  text. Keeping that wrapper separate lets token-level parser proofs avoid
+  checking the lexer on every run.
 - `src/Elaborate.bend` lowers surface syntax to `src/Syntax.bend`'s core
   `Expr`.
 - `src/Typecheck.bend` and `src/Eval.bend` operate on the core `Expr`, not on

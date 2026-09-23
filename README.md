@@ -19,6 +19,12 @@ The image build itself needs network access to download Debian packages and
 Bend. Runtime network access is disabled, and Bend telemetry is disabled with
 `BEND_NO_TELEMETRY=1`.
 
+For source text, use `src/EdgeQLSource.bend`'s `parse_source` and
+`parse_document_source`. For already-tokenized input, use
+`src/EdgeQLParser.bend`'s `parse` and `parse_document`. Keeping the lexer
+outside the token parser shortens proof-only checks without changing the
+source-to-surface language boundary.
+
 ## SQLite package
 
 `packages/sqlite` provides an affine SQLite connection for native and

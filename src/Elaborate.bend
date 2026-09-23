@@ -14,6 +14,7 @@ type ElabError is Data:
   UnknownBuiltin{name: E.Name}
   UnsupportedSurfaceForm{}
   ElabStepLimit{}
+  InvalidCoreExpr{}
 
 type ElabResult is Data:
   Elaborated{value: S.Expr}
@@ -286,10 +287,26 @@ def elaborate_go(fuel: Nat, state: ElabState) -> ElabResult:
               elaborate_go(remaining, ReturnExpr{S.EInsert{S.TypeName{name_text(object_type)}, fields}, next_id, next})
             case UpdateFieldsContinuation{source, binder, next}:
               elaborate_go(remaining, ReturnExpr{S.EUpdate{source, binder, fields}, next_id, next})
-            case ShapeNestedContinuation{label, rest_fields, outer_subject, bindings, collected, next_id, nested_binder, next}:
+            case ShapeNestedContinuation{label, rest_fields, +outer_subject, bindings, collected, next_id, nested_binder, next}:
               elaborate_go(remaining, EvalFields{rest_fields, outer_subject, bindings, Con{nested_shape_field(label, outer_subject, nested_binder, fields), collected}, next_id, next})
             case _: ElabFailed{ElabStepLimit{}}
         case ElabFailure{error}: ElabFailed{error}
 
+def check_core_expr(value: S.Expr, valid: Bool) -> ElabResult:
+  match valid:
+    case True{}: Elaborated{value}
+    case False{}: ElabFailed{InvalidCoreExpr{}}
+
+def check_core_result(result: ElabResult) -> ElabResult:
+  match result:
+    case Elaborated{+value}:
+      check_core_expr(value, S.valid_expr(value))
+    case ElabFailed{error}: ElabFailed{error}
+
+def result_is_valid(result: ElabResult) -> Bool:
+  match result:
+    case Elaborated{value}: S.valid_expr(value)
+    case ElabFailed{error}: True{}
+
 def elaborate(surface: E.SurfaceExpr) -> ElabResult:
-  elaborate_go(100000n, EvalExpr{surface, NoSubject{}, Nil{}, 0n, ElabHalt{}})
+  check_core_result(elaborate_go(100000n, EvalExpr{surface, NoSubject{}, Nil{}, 0n, ElabHalt{}}))

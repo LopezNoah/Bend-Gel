@@ -14,26 +14,28 @@ dependency; do not treat the order as a list of independent feature ideas.
   machinery when extracting those concerns from `EdgeQLParser` becomes useful.
 - [ ] Do not introduce a standalone parser package or a highly abstract
   parser-combinator framework.
-- [ ] Define a structural core-expression validity predicate for the
+- [x] Define a structural core-expression validity predicate for the
   elaboration boundary.
-- [ ] Prove that successful elaboration produces a valid `CoreExpr`.
+- [x] Prove that successful elaboration produces a valid `CoreExpr`.
 
 ## 2. Parser Correctness
 
-- [ ] Test and, where practical, prove that successful parser transitions
-  consume tokens monotonically.
-- [ ] Test that a full expression/document parse ends at EOF, allowing only
+- [x] Test and, where practical, prove that successful parser transitions
+  consume tokens monotonically. Expression/shape suffix regressions and local
+  binary-token/comma transition proofs cover the current parser paths.
+- [x] Test that a full expression/document parse ends at EOF, allowing only
   the explicitly supported trailing semicolon form.
-- [ ] Test deterministic results and deterministic errors for the same token
+- [x] Test deterministic results and deterministic errors for the same token
   stream.
-- [ ] Add precedence and associativity cases for union, coalesce, equality,
+- [x] Add precedence and associativity cases for union, coalesce, equality,
   addition, calls, and parentheses.
-- [ ] Add a canonical pretty printer for a deliberately small subset and prove
-  `parse(pretty(ast)) = ast` for that subset.
+- [x] Add a canonical token printer for a deliberately small subset and prove
+  `parse(pretty(ast)) = ast` for that subset; test its textual rendering through
+  the lexer separately.
 
 ## 3. Cardinality Algebra
 
-- [ ] Audit `Cardinality.add`, `Cardinality.mul`, `Cardinality.le`, and
+- [x] Audit `Cardinality.add`, `Cardinality.mul`, `Cardinality.le`, and
   `Cardinality.accepts` against the five modes in the paper.
 - [x] Prove both additive identity laws and both multiplicative identity laws.
 - [x] Prove multiplication annihilation by `CEmpty` on both sides.
