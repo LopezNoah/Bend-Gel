@@ -104,3 +104,14 @@ dependency; do not treat the order as a list of independent feature ideas.
   synthesis, and evaluation.
 - [ ] Run `sh ./build-container.sh` after each proof milestone so `PROOF.bend`
   and every `tests/*Test.bend` file remain checked together.
+
+## 8. SQLite Schema And Query Translation
+
+- [x] Parse a strict subset of SDL/DDL schema declarations into `Schema` and
+  compile object tables, single-link columns, and multi-field junction tables.
+- [ ] Extend schema parsing to modules beyond `default`, constraints, computed
+  fields, and link properties; keep unsupported declarations explicit errors.
+- [ ] Add migrations/diffing for existing SQLite databases and decide how to
+  enforce nonempty multi cardinality across writes.
+- [ ] Translate supported, elaborated EdgeQL query expressions into SQLite
+  SELECT/INSERT/UPDATE statements using the generated table layout.
